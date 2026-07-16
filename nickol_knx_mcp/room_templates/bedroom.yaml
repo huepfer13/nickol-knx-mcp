@@ -15,6 +15,9 @@ parameters:
   windows:
     default: 2
     provenance: {source: preset_rule, note: "typical master bedroom has 2 windows"}
+  venetian_windows:
+    default: 0
+    provenance: {source: preset_rule, note: "opt-in: set >0 where blinds have slats (façade/venetian)"}
   area_m2:
     default: 14
     role: hint
@@ -42,6 +45,15 @@ slots:
       basic:   {enabled: true, function: shutter, multiplicity: {param: windows}}
       comfort: {enabled: true, function: shutter, multiplicity: {param: windows}}
 
+  # Venetian / façade blinds (slat control + wind/frost safety-lock). Opt-in:
+  # emits nothing until venetian_windows > 0, so a plain roller-shutter house is
+  # unchanged. Where windows carry slats, set venetian_windows.
+  - slot_id: venetian_blind
+    labels: {ru: венецианские жалюзи, en: venetian blind}
+    presets:
+      basic:   {enabled: true, function: shutter_venetian, multiplicity: {param: venetian_windows}}
+      comfort: {enabled: true, function: shutter_venetian, multiplicity: {param: venetian_windows}}
+
   - slot_id: presence
     labels: {ru: датчик, en: sensor}
     presets:
@@ -55,9 +67,15 @@ slots:
       comfort: {enabled: true, function: climate_floor, multiplicity: {fixed: 1}}
 
 # Non-executable declarations only (metadata). The engine does NOT run these —
-# safety-related logic stays external (Home Assistant / the KNX program).
+# safety-related logic stays in KNX (autonomous), convenience logic external.
 automation_intents:
   - intent: presence_lights_off
     description: "Turn bedroom lights off when unoccupied."
     criticality: convenience
     implementation: external
+  # Safety-related: wind/frost protection MUST stay in KNX, never in HA — the
+  # actuator listens on the shutter_venetian safety-lock input.
+  - intent: wind_frost_blind_protection
+    description: "Retract/lock blinds on high wind or frost (via the safety-lock input)."
+    criticality: safety_related
+    implementation: knx

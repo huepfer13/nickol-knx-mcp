@@ -66,12 +66,49 @@ with a canonical DPT and a command/status role:
 |----------|----------------------|
 | `lighting_switch` | on/off `1.001` · status `1.011` |
 | `lighting_dimmer` | on/off `1.001` · dimming `3.007` · brightness `5.001` · status `1.011` · brightness-status `5.001` |
+| `lighting_dali` | 1:1 clone of `lighting_dimmer` (DALI specifics live inside the gateway; BOM recipe `dali_gateway_group`) |
 | `shutter` | up/down `1.008` · stop `1.010` · position `5.001` · position-status `5.001` |
-| `climate_floor` | on/off `1.001` · setpoint `9.001` · mode `20.102` · +3 statuses · actual-temp `9.001` |
+| `shutter_venetian` | `shutter` + slat `5.001` · slat-status `5.001` + safety-lock `1.001` (write-only input — see below) |
+| `climate_floor` | on/off `1.001` · setpoint `9.001` · mode `20.102` · +3 statuses · actual-temp `9.001` · actuating-value `5.001` · actuating-value-status `5.001` |
+| `ventilation` | airing-stage `5.010` · airing-stage-status `5.010` · CO₂ `9.008` · humidity `9.007` |
+| `multisensor_air` | temperature `9.001` · humidity `9.007` · CO₂ `9.008` (self-reporting, no command → no status pair) |
 | `presence` | occupancy `1.018` · illuminance `9.004` |
+| `central_scene` | scene `18.001` (no status — a scene has no single state) |
+| `central_all_off` / `central_all_on` | all-off / all-on `1.001` (central macro — no single state to read back) |
 
 Every controllable command gets its status object — the generated project passes
 `check_missing_status`, `check_dpt`, `check_naming` and `check_policy` cleanly.
+
+Three object classes legitimately have **no status pair**, and the linters treat
+them as expected (INFO, not a warning), so a house using them is still clean:
+
+* **safety-lock** input (`shutter_venetian`): a wind/frost lock is a *write-only*
+  1-bit input the actuator listens to — there is no feedback object
+  (`analyze._is_safety_input` → `safety_input_no_status`);
+* **scene control** (`central_scene`, `17.x`/`18.x`): a scene recalls a preset,
+  it has no single state (`scene_no_status`);
+* **central macros** (`central_all_off`/`_all_on`, "all off"/"all on"/"всё"): a
+  broadcast fans out to many actuators (`central_macro_no_status`).
+
+### Status/feedback tokens (pairing)
+
+The pairing engine treats **`Feedback` / `Rückmeldung` / `статус` / `state` /
+`status`** (and `fb`, `rueck`, `rück`) as first-class status tokens — a vendor
+that names its only status object just "Feedback" (e.g. Theben) still pairs. The
+token list lives in `project.STATUS_KEYWORDS` and `pairing._FN_STATUS_TOKENS`.
+
+### DPT tolerance (generation vs import)
+
+"**Missing DPT = hard error**" (`check_dpt`) is a rule about **our generated
+output**: the Room Library always emits fully DPT-typed GAs, so a missing DPT in
+our own output is a real bug. It is *not* a judgement on a third-party **ETS4
+import**: in ETS4-era projects the DPT legitimately lives on the device's
+communication object, not on the GA, so `xknxproject` derives it (or reports
+`missing_dpt` where the object link is unresolved). Auto-completing that DPT is a
+feature, not a defect flag on the vendor — see
+[`docs/roadmap/room-library/theben-benchmark/01-dpt-derivation.md`](../../../docs/roadmap/room-library/theben-benchmark/01-dpt-derivation.md).
+Reserve GAs are intentionally left **without a DPT** — that is a convention (a
+spare slot), not a KNX-required value.
 
 ## Address allocation (default taxonomy)
 
@@ -96,8 +133,15 @@ automation_intents:
   - intent: presence_lights_off
     description: "Turn lights off when unoccupied."
     criticality: convenience        # or safety_related
-    implementation: external
+    implementation: external        # external (HA) | knx
 ```
+
+`implementation` is `external` (Home Assistant) or `knx` (the autonomous KNX
+program). **Rule: `criticality: safety_related` ⇒ `implementation: knx`.**
+Safety protection (wind/frost blind retract, leak→water-shutoff, fire) must run
+autonomously in KNX and must never depend on a network-reachable HA. The template
+lays the GA **hook** (e.g. the `shutter_venetian` safety-lock input); the
+integrator tunes the **thresholds** (wind m/s, frost °C, timers) in KNX.
 
 ## Not in R1
 

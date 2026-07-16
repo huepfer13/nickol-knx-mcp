@@ -42,6 +42,12 @@ slots:
       basic:   {enabled: false}
       comfort: {enabled: true, function: climate_floor, multiplicity: {fixed: 1}}
 
+  - slot_id: ventilation
+    labels: {ru: вентиляция, en: ventilation}
+    presets:
+      basic:   {enabled: false}
+      comfort: {enabled: true, function: ventilation, multiplicity: {fixed: 1}}
+
 automation_intents:
   - intent: humidity_ventilation
     description: "Run ventilation above a humidity threshold."

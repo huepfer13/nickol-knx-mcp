@@ -58,7 +58,10 @@ _DOMAIN_TERMS: dict[str, list[str]] = {
     "hvac": ["hvac", "climate", "thermostat", "heat", "cool", "ac", "a/c", "aircon",
              "air con", "air-con", "conditioner", "ventilation", "radiator", "boiler",
              "underfloor", "fancoil", "fan coil", "fan-coil", "fan", "valve", "setpoint",
-             "климат", "отопл", "тёпл", "тепл", "конвектор", "вентил",
+             # ventilation / airing (F5 fix): "Airing step" was 'unknown' — an airing
+             # stage is HVAC. lüftung/lüften carry the DE umlaut and an ASCII fallback.
+             "airing", "lüftung", "lüften", "luftung", "luften",
+             "климат", "отопл", "тёпл", "тепл", "конвектор", "вентил", "проветр",
              "клапан", "кондиц", "котёл", "радиатор", "фанкойл", "уставк",
              "а/с", "сплит", "вытяжк"],
     # NOTE: no bare "температур"/"temperature" term — a temperature GA takes its

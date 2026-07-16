@@ -42,6 +42,12 @@ slots:
       basic:   {enabled: false}
       comfort: {enabled: true, function: presence, multiplicity: {fixed: 1}}
 
+  - slot_id: ventilation
+    labels: {ru: вентиляция, en: ventilation}
+    presets:
+      basic:   {enabled: false}
+      comfort: {enabled: true, function: ventilation, multiplicity: {fixed: 1}}
+
 automation_intents:
   - intent: presence_lights_off
     description: "Turn kitchen lights off when unoccupied."

@@ -22,8 +22,9 @@ from nickol_knx_mcp.policy import check_policy, load_policy
 
 # --------------------------------------------------------------------------- #
 # Golden: a single bedroom (comfort) — exact address -> (name, dpt) in RU and EN.
-# Hand-verified structure: 26 GAs = dimmer(5) + 2×switch(2) + 2×shutter(4)
-# + climate(7) + presence(2).
+# Hand-verified structure: 28 GAs = dimmer(5) + 2×switch(2) + 2×shutter(4)
+# + climate(9: +actuating-value +its status) + presence(2). The opt-in
+# venetian_blind slot has venetian_windows=0 by default, so it emits nothing here.
 # --------------------------------------------------------------------------- #
 GOLDEN_BEDROOM_RU = {
     "1/0/1": ("Спальня основной свет вкл/выкл", "1.001"),
@@ -49,7 +50,9 @@ GOLDEN_BEDROOM_RU = {
     "3/4/1": ("Спальня тёплый пол статус", "1.011"),
     "3/4/2": ("Спальня тёплый пол уставка статус", "9.001"),
     "3/4/3": ("Спальня тёплый пол режим статус", "20.102"),
+    "3/4/4": ("Спальня тёплый пол уровень клапана статус", "5.001"),
     "3/5/1": ("Спальня тёплый пол температура факт", "9.001"),
+    "3/7/1": ("Спальня тёплый пол уровень клапана", "5.001"),
     "4/0/1": ("Спальня датчик присутствие", "1.018"),
     "4/1/1": ("Спальня датчик освещённость", "9.004"),
 }
@@ -77,7 +80,9 @@ GOLDEN_BEDROOM_EN = {
     "3/4/1": ("Bedroom floor heating status", "1.011"),
     "3/4/2": ("Bedroom floor heating setpoint status", "9.001"),
     "3/4/3": ("Bedroom floor heating mode status", "20.102"),
+    "3/4/4": ("Bedroom floor heating actuating value status", "5.001"),
     "3/5/1": ("Bedroom floor heating actual temperature", "9.001"),
+    "3/7/1": ("Bedroom floor heating actuating value", "5.001"),
     "4/0/1": ("Bedroom sensor occupancy", "1.018"),
     "4/1/1": ("Bedroom sensor illuminance", "9.004"),
 }
@@ -90,7 +95,7 @@ def _obj_map(house):
 def test_templates_all_valid():
     tmpls = rl.load_builtin_templates()
     assert set(tmpls) == {"bedroom", "children", "living", "kitchen",
-                          "bathroom", "corridor"}, sorted(tmpls)
+                          "bathroom", "corridor", "central"}, sorted(tmpls)
     for tid, t in tmpls.items():
         v = rl.validate_room_template(t)
         assert v["ok"], (tid, v["findings"])

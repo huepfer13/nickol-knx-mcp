@@ -1,0 +1,52 @@
+# Room Template — house-level Central functions (Центральные функции)
+# NOT per-room: composed once for the whole house. A small set of scene controls
+# (18.001) plus per-domain all-off / all-on broadcasts (1.001). SCHEMA reserves
+# main group 0 Central for exactly this. Keep the scene set small — panels and the
+# KNX program assemble the detailed logic; the template only lays the GA hooks.
+schema_version: 1
+slot_id: central
+labels:
+  ru: Центральные функции
+  en: Central
+
+parameters:
+  scenes:
+    default: 4
+    provenance: {source: preset_rule, note: "keep small — a few house scenes; the rest live on panels"}
+  area_m2:
+    default: 0
+    role: hint
+    provenance: {source: preset_default, user_overridden: false, note: "house-level, not an area"}
+
+slots:
+  - slot_id: house_scenes
+    labels: {ru: сцены, en: scenes}
+    presets:
+      basic:   {enabled: true, function: central_scene, multiplicity: {param: scenes}}
+      comfort: {enabled: true, function: central_scene, multiplicity: {param: scenes}}
+
+  - slot_id: lighting_all_off
+    labels: {ru: освещение всё выкл, en: lighting all off}
+    presets:
+      basic:   {enabled: true, function: central_all_off, multiplicity: {fixed: 1}}
+      comfort: {enabled: true, function: central_all_off, multiplicity: {fixed: 1}}
+
+  - slot_id: lighting_all_on
+    labels: {ru: освещение всё вкл, en: lighting all on}
+    presets:
+      basic:   {enabled: false}
+      comfort: {enabled: true, function: central_all_on, multiplicity: {fixed: 1}}
+
+  - slot_id: shutters_all_off
+    labels: {ru: шторы всё выкл, en: shutters all off}
+    presets:
+      basic:   {enabled: true, function: central_all_off, multiplicity: {fixed: 1}}
+      comfort: {enabled: true, function: central_all_off, multiplicity: {fixed: 1}}
+
+# Metadata only. Central all-off / scene recall is convenience logic assembled on
+# panels / in the KNX program; safety-related protection lives per-actuator in KNX.
+automation_intents:
+  - intent: house_all_off
+    description: "One-touch all-off across lighting and shutters."
+    criticality: convenience
+    implementation: knx

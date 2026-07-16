@@ -46,10 +46,28 @@ def _infer_dpt(ga: Any) -> str:
         return "1.010"
     if "позиц" in low or "position" in low or "stellung" in low:
         return "5.001"
-    if any(k in low for k in ("диммир", "dimming", "яркост", "brightness")):
-        return "5.001"
+    # Scene BEFORE the broad "value" branch so a "Scene value"/"Szene Wert" GA
+    # maps to 18.001, not 5.001 (a Theben "Dimming value %" carries no scene token,
+    # so it still falls through to 5.001 below).
     if "сцен" in low or "scene" in low or "szene" in low:
         return "18.001"
+    # Explicit ABSOLUTE brightness/dimming VALUE (percent / "value" / "dimming
+    # value" / vendor Dimmwert) -> 5.001 scaling. Checked BEFORE relative dimming
+    # so a Theben "Dimming value % …" GA stays 5.001 and is not flipped to 3.007.
+    if any(k in low for k in ("%", "значение", "value", "dimmwert", "helligkeitswert")):
+        return "5.001"
+    # RELATIVE dimming (brighter/darker step control) -> 3.007 DPT_Control_Dimming
+    # (4-bit relative dimming). Verified against the KNX DPT catalogue
+    # (XKNX/xknx via deepwiki: 3.007 == control bit + 3-bit step_code). This is the
+    # dogfood bug fix: "Brighter/ darker …" used to fall through to the 1.001
+    # default, contradicting the object-derived family "3" xknxproject reports.
+    if any(k in low for k in ("brighter", "darker", "heller", "dunkler",
+                              "светлее", "темнее", "ярче", "тусклее")):
+        return "3.007"
+    # Generic dimming/brightness keyword with no explicit value and no relative
+    # token -> absolute brightness scaling is the safer default.
+    if any(k in low for k in ("диммир", "dimming", "яркост", "brightness")):
+        return "5.001"
     if ga.category == "shutter":
         return "1.008"
     # switch-like boolean is the safest default

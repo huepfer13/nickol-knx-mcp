@@ -188,6 +188,22 @@ def _is_scene(ga: GARecord) -> bool:
     return ga.dpt_main in (17, 18) or ga.category == "scene"
 
 
+# A wind/frost safety-lock is a WRITE-ONLY 1-bit input the shutter actuator listens
+# to (the KNX safety logic drives it); it has no feedback object, so a missing
+# status is expected, not a defect. Gated to 1-bit so a "frost protection setpoint"
+# (9.x) never matches. This is the Theben-benchmark safety_related lesson: the lock
+# stays in KNX, never in network-dependent Home Assistant.
+_SAFETY_INPUT_TOKENS = (
+    "safety lock", "блокировк", "sperre", "verriegel", "wind lock",
+    "wind/frost", "ветров", "мороз", "frost lock", "windsperre", "frostsperre",
+)
+
+
+def _is_safety_input(ga: GARecord) -> bool:
+    low = (ga.name or "").lower()
+    return ga.dpt_main == 1 and any(t in low for t in _SAFETY_INPUT_TOKENS)
+
+
 # --------------------------------------------------------------------------- #
 # Sub-DPT sanity (A1): a name implies a specific DPT sub-type. Flag when the
 # main matches but the sub is wrong (9.001 temp vs 9.004 lux), or — for strong
@@ -255,6 +271,19 @@ def detect_missing_status(project: LoadedProject) -> list[dict[str, Any]]:
             continue
         if ga.dpt_main is None:
             continue  # DPT issue handled elsewhere
+        # A wind/frost safety-lock is a write-only INPUT — recognise it up front so
+        # it is never (spuriously) paired to a position status, and never demands a
+        # feedback object of its own (safety_related logic stays in KNX).
+        if _is_safety_input(ga):
+            findings.append(_finding(
+                SEVERITY_INFO, "safety_input_no_status", addr,
+                f"Safety/lock input '{ga.name}' has no status GA — expected: a "
+                "wind/frost safety-lock is a write-only input to the actuator, it has "
+                "no state to read back. Keep this protection in KNX (safety_related), "
+                "never in network-dependent Home Assistant.",
+                name=ga.name, dpt=ga.dpt, category=ga.category,
+            ))
+            continue
         # prefer same-main-group candidates, fall back to whole project
         same_main = [s for s in status_gas if s.main == ga.main]
         match = find_status(ga, same_main) or find_status(ga, status_gas)

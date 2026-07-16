@@ -12,6 +12,9 @@ parameters:
   windows:
     default: 3
     provenance: {source: preset_rule}
+  venetian_windows:
+    default: 0
+    provenance: {source: preset_rule, note: "opt-in: set >0 where blinds have slats (façade/venetian)"}
   area_m2:
     default: 28
     role: hint
@@ -37,6 +40,16 @@ slots:
       basic:   {enabled: true, function: shutter, multiplicity: {param: windows}}
       comfort: {enabled: true, function: shutter, multiplicity: {param: windows}}
 
+  # Venetian / façade blinds (slat control + wind/frost safety-lock). Opt-in:
+  # emits nothing until venetian_windows > 0, so a plain roller-shutter house is
+  # unchanged. Where windows carry slats, set venetian_windows and drop the roller
+  # count in `windows` accordingly.
+  - slot_id: venetian_blind
+    labels: {ru: венецианские жалюзи, en: venetian blind}
+    presets:
+      basic:   {enabled: true, function: shutter_venetian, multiplicity: {param: venetian_windows}}
+      comfort: {enabled: true, function: shutter_venetian, multiplicity: {param: venetian_windows}}
+
   - slot_id: presence
     labels: {ru: датчик, en: sensor}
     presets:
@@ -54,3 +67,10 @@ automation_intents:
     description: "Recall living-room lighting scenes (movie/evening/bright)."
     criticality: convenience
     implementation: external
+  # Safety-related: wind/frost retracts the blinds. This protection MUST live in
+  # KNX (autonomous, network-independent), never in Home Assistant — the actuator
+  # listens on the shutter_venetian safety-lock input.
+  - intent: wind_frost_blind_protection
+    description: "Retract/lock blinds on high wind or frost (via the safety-lock input)."
+    criticality: safety_related
+    implementation: knx

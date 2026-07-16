@@ -79,9 +79,11 @@ MIDDLE_ROLE: dict[str, dict[str, int]] = {
     "lighting": {"cmd_onoff": 0, "dimming": 1, "brightness_value": 2,
                  "status_onoff": 3, "brightness_status": 4},
     "shutter": {"move": 0, "stop": 1, "position": 2, "slat": 3,
-                "position_status": 4},
+                "position_status": 4, "slat_status": 5, "safety_lock": 6},
+    # fan(3) is a reserved role slot (no template function uses it yet); airing(6)
+    # carries the ventilation stage, valve(7) the modulating actuating-value.
     "hvac": {"onoff": 0, "mode": 1, "setpoint": 2, "fan": 3, "status": 4,
-             "actual_temp": 5},
+             "actual_temp": 5, "airing": 6, "valve": 7},
     "sensor": {"presence": 0, "illuminance": 1, "climate": 2},
     "central": {"scene": 0, "command": 1},
 }
@@ -96,13 +98,17 @@ MIDDLE_LABELS: dict[str, dict[int, dict[str, str]]] = {
                 1: {"ru": "Стоп", "en": "Stop"},
                 2: {"ru": "Позиция", "en": "Position"},
                 3: {"ru": "Ламели", "en": "Slats"},
-                4: {"ru": "Статус позиции", "en": "Position status"}},
+                4: {"ru": "Статус позиции", "en": "Position status"},
+                5: {"ru": "Статус ламелей", "en": "Slat status"},
+                6: {"ru": "Блокировка (защита)", "en": "Safety lock"}},
     "hvac": {0: {"ru": "Вкл/Выкл", "en": "On/Off"},
              1: {"ru": "Режим", "en": "Mode"},
              2: {"ru": "Уставка", "en": "Setpoint"},
              3: {"ru": "Вентилятор", "en": "Fan"},
              4: {"ru": "Статусы", "en": "Statuses"},
-             5: {"ru": "Температура факт", "en": "Actual temperature"}},
+             5: {"ru": "Температура факт", "en": "Actual temperature"},
+             6: {"ru": "Проветривание", "en": "Ventilation"},
+             7: {"ru": "Клапан", "en": "Valve"}},
     "sensor": {0: {"ru": "Присутствие/Движение", "en": "Presence/Motion"},
                1: {"ru": "Освещённость", "en": "Illuminance"},
                2: {"ru": "Климат в комнатах", "en": "Room climate"}},
@@ -150,11 +156,34 @@ FUNCTION_OBJECTS: dict[str, list[ObjSpec]] = {
         ObjSpec("onoff_status", "статус", "status", 1, 11, "status", "lighting", "status_onoff"),
         ObjSpec("brightness_status", "яркость статус", "brightness status", 5, 1, "status", "lighting", "brightness_status"),
     ],
+    "lighting_dali": [
+        # DALI is a downstream bus behind a gateway; from the KNX side a DALI group
+        # exposes the SAME objects as a dimmer channel (the DALI specifics live
+        # inside the gateway). No invented DPTs — a 1:1 clone of lighting_dimmer.
+        ObjSpec("onoff", "вкл/выкл", "on/off", 1, 1, "command", "lighting", "cmd_onoff"),
+        ObjSpec("dimming", "диммирование", "dimming", 3, 7, "command", "lighting", "dimming"),
+        ObjSpec("brightness", "яркость", "brightness", 5, 1, "command", "lighting", "brightness_value"),
+        ObjSpec("onoff_status", "статус", "status", 1, 11, "status", "lighting", "status_onoff"),
+        ObjSpec("brightness_status", "яркость статус", "brightness status", 5, 1, "status", "lighting", "brightness_status"),
+    ],
     "shutter": [
         ObjSpec("updown", "вверх/вниз", "up/down", 1, 8, "command", "shutter", "move"),
         ObjSpec("stop", "стоп", "stop", 1, 10, "command", "shutter", "stop"),
         ObjSpec("position", "позиция", "position", 5, 1, "command", "shutter", "position"),
         ObjSpec("position_status", "позиция статус", "position status", 5, 1, "status", "shutter", "position_status"),
+    ],
+    # Venetian / façade blind: a roller shutter PLUS slat-angle control (the roller
+    # `shutter` models only up/down/position). Slat command + slat status close the
+    # feedback gap for the angle; the wind/frost safety-lock is a WRITE-ONLY input
+    # to the actuator (no status object exists for it — see analyze._is_safety_input).
+    "shutter_venetian": [
+        ObjSpec("updown", "вверх/вниз", "up/down", 1, 8, "command", "shutter", "move"),
+        ObjSpec("stop", "стоп", "stop", 1, 10, "command", "shutter", "stop"),
+        ObjSpec("position", "позиция", "position", 5, 1, "command", "shutter", "position"),
+        ObjSpec("position_status", "позиция статус", "position status", 5, 1, "status", "shutter", "position_status"),
+        ObjSpec("slat", "ламели", "slat", 5, 1, "command", "shutter", "slat"),
+        ObjSpec("slat_status", "ламели статус", "slat status", 5, 1, "status", "shutter", "slat_status"),
+        ObjSpec("safety_lock", "блокировка защита", "safety lock", 1, 1, "command", "shutter", "safety_lock"),
     ],
     "climate_floor": [
         ObjSpec("onoff", "вкл/выкл", "on/off", 1, 1, "command", "hvac", "onoff"),
@@ -164,10 +193,43 @@ FUNCTION_OBJECTS: dict[str, list[ObjSpec]] = {
         ObjSpec("setpoint_status", "уставка статус", "setpoint status", 9, 1, "status", "hvac", "status"),
         ObjSpec("mode_status", "режим статус", "mode status", 20, 102, "status", "hvac", "status"),
         ObjSpec("actual_temp", "температура факт", "actual temperature", 9, 1, "sensor", "hvac", "actual_temp"),
+        # Modulating valve: a continuous actuating-value (%) command + its status.
+        # A real underfloor/radiator loop is driven continuously, not just on/off,
+        # and without a status HA cannot show the real valve opening.
+        ObjSpec("actuating_value", "уровень клапана", "actuating value", 5, 1, "command", "hvac", "valve"),
+        ObjSpec("actuating_value_status", "уровень клапана статус", "actuating value status", 5, 1, "status", "hvac", "status"),
+    ],
+    # Ventilation / airing: a discrete airing STAGE (1-byte counter, DPT 5.010 —
+    # a device/integrator choice, see 01-dpt-derivation.md) plus its feedback, and
+    # the air-quality sensors that drive it (CO₂ 9.008, humidity 9.007).
+    "ventilation": [
+        ObjSpec("airing_stage", "ступень проветривания", "airing stage", 5, 10, "command", "hvac", "airing"),
+        ObjSpec("airing_stage_status", "ступень проветривания статус", "airing stage status", 5, 10, "status", "hvac", "status"),
+        ObjSpec("co2", "CO2", "CO2", 9, 8, "sensor", "sensor", "climate"),
+        ObjSpec("humidity", "влажность", "humidity", 9, 7, "sensor", "sensor", "climate"),
     ],
     "presence": [
         ObjSpec("occupancy", "присутствие", "occupancy", 1, 18, "sensor", "sensor", "presence"),
         ObjSpec("illuminance", "освещённость", "illuminance", 9, 4, "sensor", "sensor", "illuminance"),
+    ],
+    # Air-quality multisensor: self-reporting temperature + humidity + CO₂ (no
+    # command, so no status pair — these are read-only measurements).
+    "multisensor_air": [
+        ObjSpec("temperature", "температура", "temperature", 9, 1, "sensor", "sensor", "climate"),
+        ObjSpec("humidity", "влажность", "humidity", 9, 7, "sensor", "sensor", "climate"),
+        ObjSpec("co2", "CO2", "CO2", 9, 8, "sensor", "sensor", "climate"),
+    ],
+    # House-level central functions (main 0). A scene control (18.001, no status —
+    # a scene has no single state) and per-domain all-off / all-on broadcasts
+    # (1.001, central macros — no single state to read back).
+    "central_scene": [
+        ObjSpec("scene", "сцена", "scene", 18, 1, "command", "central", "scene"),
+    ],
+    "central_all_off": [
+        ObjSpec("all_off", "всё выкл", "all off", 1, 1, "command", "central", "command"),
+    ],
+    "central_all_on": [
+        ObjSpec("all_on", "всё вкл", "all on", 1, 1, "command", "central", "command"),
     ],
 }
 
@@ -175,7 +237,9 @@ FUNCTION_OBJECTS: dict[str, list[ObjSpec]] = {
 BOM_RECIPE: dict[str, str] = {
     "lighting_switch": "switch_output",
     "lighting_dimmer": "dimmer_channel",
+    "lighting_dali": "dali_gateway_group",
     "shutter": "shutter_channel",
+    "shutter_venetian": "shutter_channel",
     "climate_floor": "floor_heating_zone",
     "presence": "presence_detector",
 }
