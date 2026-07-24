@@ -10,7 +10,8 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from .project import LoadedProject
-from .analyze import validate_naming, detect_missing_status, detect_dpt_issues
+from .analyze import (validate_naming, detect_missing_status, detect_dpt_issues,
+                      detect_topology_issues)
 from .generate_ha import generate_ha_yaml
 
 
@@ -36,6 +37,7 @@ def build_report(project: LoadedProject,
     naming = validate_naming(project, name_regex=name_regex)
     status = detect_missing_status(project)
     dpts = detect_dpt_issues(project)
+    topology = detect_topology_issues(project)
     ha = generate_ha_yaml(project)
 
     info = project.info
@@ -48,7 +50,7 @@ def build_report(project: LoadedProject,
     secure = sum(1 for ga in gas.values() if ga.data_secure)
     non_functional = sum(v for k, v in intent_counts.items() if k != "functional")
 
-    all_findings = naming + status + dpts
+    all_findings = naming + status + dpts + topology
     sev_counts = Counter(f["severity"] for f in all_findings)
 
     md: list[str] = []
@@ -91,6 +93,7 @@ def build_report(project: LoadedProject,
     md.append("\n" + _section("2.1 Naming & structure", naming))
     md.append("\n" + _section("2.2 Missing status addresses", status))
     md.append("\n" + _section("2.3 DPT consistency", dpts))
+    md.append("\n" + _section("2.4 Topology & addressing", topology))
 
     md.append("\n## 3. Home Assistant mapping preview\n")
     c = ha["counts"]
@@ -123,6 +126,7 @@ def build_report(project: LoadedProject,
         "warnings": sev_counts.get("warning", 0),
         "info": sev_counts.get("info", 0),
         "missing_status": len(status),
+        "topology": len(topology),
         "intent": dict(intent_counts),
         "ha_entities": {k: v for k, v in c.items() if k != "review"},
         "ha_review": c["review"],
