@@ -515,6 +515,154 @@ def detect_dpt_issues(project: LoadedProject) -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
+# Topology / individual-address sanity, grounded in the KNX standard.
+#
+# GROUNDING (verified, not invented):
+#   * The individual (physical) address is area(4 bits, 0-15).line(4 bits, 0-15).
+#     device(1 byte, 0-255), and device number 0 denotes a line/area coupler.
+#     Confirmed against the xknx `IndividualAddress` class via deepwiki
+#     (repo XKNX/xknx): MAX area = 15, MAX line = 15, MAX device = 255, and the
+#     `is_line` property is True exactly when the device part is 0 (a coupler).
+#   * The 64-devices-per-TP1-segment and 256-devices-per-line (4 segments via
+#     repeaters) capacity figures are NOT encoded in the xknx source — they come
+#     from the KNX Handbook and are cited to their pages inline below. Treat the
+#     page citations as the authority for the capacity numbers.
+# --------------------------------------------------------------------------- #
+def _parse_individual_address(ia: str) -> Optional[tuple[int, int, int]]:
+    """Parse 'A.L.D' -> (area, line, device) or None if not a valid triple.
+
+    Valid ranges: area 0-15, line 0-15, device 0-255 (confirmed via xknx
+    IndividualAddress: MAX_AREA=15, MAX_MAIN=15, MAX_LINE=255)."""
+    parts = (ia or "").strip().split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        a, ln, d = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+    if 0 <= a <= 15 and 0 <= ln <= 15 and 0 <= d <= 255:
+        return (a, ln, d)
+    return None
+
+
+def detect_topology_issues(project: LoadedProject) -> list[dict[str, Any]]:
+    """Check topology capacity + individual-address validity/uniqueness + couplers.
+
+    Passes (each grounded — see the module comment above):
+      * devices per line vs the TP1 segment (64) / line (256) capacity;
+      * every device individual address parses as a valid A.L.D triple;
+      * individual addresses are unique across devices;
+      * every multi-line project has a coupler (device .0) per TP line.
+
+    An empty topology / a project with zero devices returns [] (synthetic demo
+    projects legitimately carry no devices — this must never raise).
+    """
+    findings: list[dict[str, Any]] = []
+    topo = project.topology or {}
+    devices = project.devices or {}
+
+    # Flatten the topology to (line_id, line_name, medium, [device_addr_str,...]).
+    # The line key in xknxproject is already the full 'area.line' (e.g. '1.1').
+    lines: list[tuple[str, str, str, list[str]]] = []
+    for area in topo.values():
+        for lid, line in (area.get("lines", {}) or {}).items():
+            lines.append((
+                str(lid),
+                line.get("name") or "",
+                (line.get("medium_type") or "").upper(),
+                list(line.get("devices", []) or []),
+            ))
+
+    # Empty topology / zero devices -> nothing to check (do not raise).
+    total_topo_devices = sum(len(devs) for _, _, _, devs in lines)
+    if total_topo_devices == 0 and not devices:
+        return findings
+
+    n_lines = len(lines)
+
+    # 1. Devices per line vs TP1 capacity (KNX Handbook). >256 is the harder cap,
+    #    so it wins over the >64 segment note for the same line.
+    for lid, lname, medium, devs in lines:
+        # 64/256 are TP1-specific limits (KNX Handbook TP1). Other media
+        # (IP/PL/RF) have different capacities — apply only to Twisted Pair lines.
+        # xknxproject reports the full medium string ('Twisted Pair (TP)'), so
+        # match the '(TP)' tag, not a bare 'TP'.
+        if "(TP)" not in medium:
+            continue
+        count = len(devs)
+        label = f"Line {lid}" + (f" ('{lname}')" if lname else "")
+        if count > 256:
+            findings.append(_finding(
+                SEVERITY_WARN, "topology_line_overflow", lid,
+                f"{label} has {count} devices — exceeds the TP1 line maximum of 256 "
+                "(4 segments of 64 via repeaters). KNX Handbook p.55.",
+                line=lid, device_count=count,
+            ))
+        elif count > 64:
+            findings.append(_finding(
+                SEVERITY_INFO, "topology_segment_limit", lid,
+                f"{label} has {count} devices — a single TP1 segment holds max 64 "
+                "(KNX Handbook p.36/40); split into further segments/repeaters and "
+                "ensure sufficient bus power (≤640 mA per segment).",
+                line=lid, device_count=count,
+            ))
+
+    # 2. Individual-address validity — parse each device's address as A.L.D.
+    for dev in devices.values():
+        ia = (dev.get("individual_address") or "").strip()
+        if _parse_individual_address(ia) is None:
+            findings.append(_finding(
+                SEVERITY_WARN, "invalid_individual_address", ia or "-",
+                f"Device '{dev.get('name', '?')}' has individual address "
+                f"'{ia or '(none)'}' — not a valid A.L.D where area 0-15, line 0-15, "
+                "device 0-255 (confirmed via xknx IndividualAddress).",
+                name=dev.get("name"),
+            ))
+
+    # 3. Uniqueness — duplicate individual addresses across devices. Iterate by the
+    #    address FIELD (not the devices-dict key) so a genuine duplicate is caught
+    #    even if the dict happens to key devices differently.
+    by_addr: dict[str, list[str]] = defaultdict(list)
+    for dev in devices.values():
+        ia = (dev.get("individual_address") or "").strip()
+        if ia:
+            by_addr[ia].append(dev.get("name", "?"))
+    for ia, names in by_addr.items():
+        if len(names) > 1:
+            findings.append(_finding(
+                SEVERITY_ERROR, "duplicate_individual_address", ia,
+                f"Individual address '{ia}' is used by {len(names)} devices: {names}. "
+                "Every KNX device must have a unique individual address.",
+                names=names,
+            ))
+
+    # 4. Coupler presence (soft). Only for multi-line projects, and only on TP
+    #    lines — a single-line or IP-only design needs no per-line TP coupler, so
+    #    those must not be flagged (avoid noise). A coupler carries device 0.
+    if n_lines > 1:
+        for lid, lname, medium, devs in lines:
+            # Coupler-on-.0 is a TP-topology concept; skip IP/PL/RF/Unknown lines.
+            # xknxproject reports the full medium string ('KNXnet/IP (IP)', etc.),
+            # so match the '(TP)' tag rather than a bare 'IP'.
+            if not devs or "(TP)" not in medium:
+                continue
+            has_coupler = any(
+                (_parse_individual_address(str(da)) or (None, None, None))[2] == 0
+                for da in devs
+            )
+            if not has_coupler:
+                label = f"Line {lid}" + (f" ('{lname}')" if lname else "")
+                findings.append(_finding(
+                    SEVERITY_INFO, "line_without_coupler", lid,
+                    f"{label} has devices but none at .0 — a line/area coupler uses "
+                    "device 0; check coupler addressing. KNX Handbook p.43.",
+                    line=lid,
+                ))
+
+    return findings
+
+
+# --------------------------------------------------------------------------- #
 # KNX Secure posture + keyring handover checklist (A4).
 # Report-only: this server never handles key material — it only summarises the
 # per-GA Security flag and emits the ETS/HA keyring workflow as a checklist.

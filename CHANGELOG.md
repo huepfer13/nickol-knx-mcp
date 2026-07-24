@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`check_topology()` — topology & individual-address sanity, grounded in the KNX standard** (tool
+  count **30 → 31**; `analyze.py`, `server.py`). Flags devices-per-line over the TP1 limits (info at
+  >64 per segment, warning at >256 per line — KNX Handbook p.36/40/55), individual addresses that
+  don't parse as a valid `A.L.D` (area 0-15, line 0-15, device 0-255 — confirmed against the xknx
+  `IndividualAddress` class), duplicate individual addresses (error), and multi-line TP projects with
+  no coupler (device `.0`) on a line (info). Empty topology / device-less synthetic projects return
+  no findings. Folded into `analyze_all` under a `topology` key and its severity totals.
+  `tests/test_topology.py`.
+
 ### Security
 
 - **Hardened parsing of untrusted `.knxproj` / `.knxprod`** (`safexml.py`). A project file is a

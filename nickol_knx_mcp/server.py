@@ -10,6 +10,7 @@ Run (stdio):  python -m nickol_knx_mcp.server
 from __future__ import annotations
 
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,7 +18,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .project import load_project as load_project_file, LoadedProject
 from .analyze import (validate_naming, detect_missing_status, detect_dpt_issues,
-                      secure_posture)
+                      detect_topology_issues, secure_posture)
 from .generate_ha import generate_ha_yaml
 from .generate_ets import generate_ets_csv, generate_ets_xml
 from .report import build_report
@@ -177,6 +178,16 @@ def check_dpt() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+def check_topology() -> list[dict[str, Any]]:
+    """Check topology capacity and individual-address validity (KNX Handbook).
+
+    Flags lines over the TP1 segment (64) / line (256) limits, invalid or
+    duplicate individual addresses, and multi-line projects missing a coupler.
+    """
+    return detect_topology_issues(_project())
+
+
+@mcp.tool()
 def suggest_repairs() -> dict[str, Any]:
     """Propose concrete fixes for the project's findings — repair, don't just flag.
 
@@ -206,11 +217,20 @@ def analyze_all(name_regex: Optional[str] = None) -> dict[str, Any]:
     """Run every check and return the report summary plus all findings."""
     proj = _project()
     rep = build_report(proj, name_regex=name_regex)
+    topology = detect_topology_issues(proj)
+    # build_report counts only naming+status+dpt severities; fold in topology so
+    # the errors/warnings/info totals cover every check the summary reports on.
+    summary = dict(rep["summary"])
+    topo_sev = Counter(f["severity"] for f in topology)
+    summary["errors"] = summary.get("errors", 0) + topo_sev.get("error", 0)
+    summary["warnings"] = summary.get("warnings", 0) + topo_sev.get("warning", 0)
+    summary["info"] = summary.get("info", 0) + topo_sev.get("info", 0)
     return {
-        "summary": rep["summary"],
+        "summary": summary,
         "naming": validate_naming(proj, name_regex=name_regex),
         "missing_status": detect_missing_status(proj),
         "dpt": detect_dpt_issues(proj),
+        "topology": topology,
     }
 
 

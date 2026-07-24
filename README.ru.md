@@ -224,11 +224,11 @@ claude mcp add nickol-knx -e NICKOL_KNX_WORKSPACE="$HOME/knx-workspace" -- /abs/
 
 ---
 
-## 5. Инструменты MCP (30)
+## 5. Инструменты MCP (31)
 
 **Чтение:** `load_project` · `list_group_addresses` · `get_devices` · `get_topology` · `explain_ga`
 
-**Валидация:** `check_naming` · `check_missing_status` · `check_dpt` (+ **sub-DPT** проверка) · `check_secure` (KNX Secure posture + keyring-чеклист) · `check_matter` (Matter-готовность) · `check_energy` (энергодомен) · `analyze_all` · `check_policy` (Project Policy Profile — *ваша* конвенция)
+**Валидация:** `check_naming` · `check_missing_status` · `check_dpt` (+ **sub-DPT** проверка) · `check_topology` (топология/адресация: TP1 64/сегмент, 256/линию, валидность и уникальность `A.L.D`, каплеры — KNX Handbook) · `check_secure` (KNX Secure posture + keyring-чеклист) · `check_matter` (Matter-готовность) · `check_energy` (энергодомен) · `analyze_all` · `check_policy` (Project Policy Profile — *ваша* конвенция)
 
 **Починка и дизайн:** `suggest_repairs` (**предлагает фиксы, а не только флагает**) · `suggest_names` · `decompose_device` (устройство → декомпозиция: **точная вендорская модель** из локального каталога или generic-рецепт) · `list_device_recipes` (device-library: Zennio + ABB) · `parse_devices_from_project` (**точные модели устройств** из app-programs `.knxproj`/`.knxprod` → YAML каталога) · `check_device_parameters` (**кросс-девайс QA параметров** — «неправильное» устройство среди одинаковых) · `grade_completeness` (скелет vs as-built) · `diff_projects` (семантический дифф двух версий)
 
@@ -248,6 +248,7 @@ claude mcp add nickol-knx -e NICKOL_KNX_WORKSPACE="$HOME/knx-workspace" -- /abs/
 | `check_naming(name_regex?)` | проверка именования/структуры |
 | `check_missing_status()` | актуаторы без статусного объекта |
 | `check_dpt()` | отсутствующие/несогласованные DPT + sub-DPT |
+| `check_topology()` | ёмкость топологии + валидность индив. адресов (TP1 64/сегмент, 256/линию, валидный и уникальный `A.L.D`, наличие каплеров — KNX Handbook) |
 | `check_secure()` | KNX Data Secure posture + keyring-чеклист |
 | `check_matter()` | Matter-готовность функций |
 | `check_energy()` | метеринг/энергодомен |
@@ -311,7 +312,7 @@ nickol-knx-mcp/
 │   ├── report.py         # Markdown-отчёт
 │   ├── room_library.py   # Room Library R1 — сборка нового проекта из шаблонов
 │   ├── room_templates/   # YAML-шаблоны комнат + SCHEMA.md (публичный контракт)
-│   └── server.py         # FastMCP сервер, 30 инструментов, confined writes
+│   └── server.py         # FastMCP сервер, 31 инструмент, confined writes
 ├── tests/test_pipeline.py
 ├── examples/claude_desktop_config.json
 ├── CLAUDE.md             # ETS Assistant skill / playbook

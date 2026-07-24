@@ -266,7 +266,7 @@ keyring handling, and the recommended workflow).
 
 ---
 
-## MCP tools (30)
+## MCP tools (31)
 
 **Read**
 | Tool | Purpose |
@@ -283,6 +283,7 @@ keyring handling, and the recommended workflow).
 | `check_naming(name_regex?)` | validate naming / 3-level structure |
 | `check_missing_status()` | actuators lacking a status object |
 | `check_dpt()` | missing / inconsistent DPTs **+ sub-DPT sanity** (temp→9.001, power→14.056…) |
+| `check_topology()` | topology capacity + individual-address validity (TP1 64/segment, 256/line, valid & unique `A.L.D`, coupler presence — KNX Handbook) |
 | `check_secure()` | KNX Data Secure posture + keyring handover checklist |
 | `check_matter()` | Matter-readiness lint (which functions round-trip to a Matter cluster) |
 | `check_energy()` | metering/energy DPT check + PV/battery/EVSE scaffold |
@@ -380,7 +381,7 @@ nickol-knx-mcp/
 │   ├── report.py         # Markdown report
 │   ├── room_library.py   # Room Library R1 — compose a new project from templates
 │   ├── room_templates/   # built-in room YAML templates + SCHEMA.md (public contract)
-│   └── server.py         # FastMCP server, 30 tools, confined writes
+│   └── server.py         # FastMCP server, 31 tools, confined writes
 ├── tests/test_pipeline.py
 ├── examples/claude_desktop_config.json
 ├── skills/
