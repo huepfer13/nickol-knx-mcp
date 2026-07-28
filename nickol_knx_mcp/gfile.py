@@ -28,14 +28,14 @@ Inside the G-File XML however, addresses are stored as **flat unsigned integers*
 
 Examples
 --------
-=========  ================  ======
-3-Level    Flat              Usage
-=========  ================  ======
-0/0/1      1                 Zeit
-1/1/0      2304              Wohnzimmer Beleuchtung
-2/0/0      4096              Wohnzimmer Status
-4/0/0      8192              Bad Heizung
-=========  ================  ======
+=========  ================  ======================
+3-Level    Flat              Typical Use
+=========  ================  ======================
+0/0/1      1                 Time-of-day sensor
+1/1/0      2304              Living room ceiling light
+2/0/0      4096              Living room light status
+4/0/0      8192              Bathroom heating control
+=========  ================  ======================
 
 ###############################################################################
 # G-File XML Structure
@@ -45,9 +45,9 @@ Examples
    <?xml version="1.0" encoding="utf-8"?>
    <GAs>
      <GRs>
-       <GR Id="..." RangeStart="1" RangeEnd="2047" Name="Zentralfunktionen" Puid="32">
-         <GR Id="..." RangeStart="1" RangeEnd="255" Name="Datum und Zeit" Puid="33">
-           <GA Id="P-0110-0_GA-1" Address="1" Name="Zeit" DatapointType="DPST-10-1" Puid="44"/>
+       <GR Id="..." RangeStart="1" RangeEnd="2047" Name="Central functions" Puid="32">
+         <GR Id="..." RangeStart="1" RangeEnd="255" Name="Date and time" Puid="33">
+           <GA Id="P-0110-0_GA-1" Address="1" Name="Time" DatapointType="DPST-10-1" Puid="44"/>
          </GR>
        </GR>
      </GRs>
@@ -78,7 +78,8 @@ References
 ----------
 * KNX Association: *Interworking Datapoint Types* (KNX Spec. v2.1, Ch. 3/7/2)
 * MDT Technologies: *Technical Handbook AKS Schaltaktor* (Status senden param.)
-* ETS6 ProjectStore format reverse-engineered 2026-07-27/28 by hardtoneselector
+* ETS6 ProjectStore format reverse-engineered 2026-07
+
 """
 
 from __future__ import annotations
@@ -127,18 +128,17 @@ def flat_to_3level(flat: int) -> str:
 
     Args:
         flat: Unsigned integer address as stored in the G-File ``Address``
-            attribute.  Must be in the range [0, 65535] for standard KNX.
+            attribute.  Must be non-negative.
 
     Returns:
         String of the form ``"main/middle/sub"`` (e.g. ``"1/1/0"``).
 
     Raises:
-        ValueError: If *flat* is negative or exceeds the 16-bit KNX
-            individual-address space.
+        ValueError: If *flat* is negative.
 
     Examples:
-        >>> flat_to_3level(1)
-        '0/0/1'
+        >>> flat_to_3level(0)
+        '0/0/0'
         >>> flat_to_3level(2304)
         '1/1/0'
         >>> flat_to_3level(8192)
@@ -146,8 +146,6 @@ def flat_to_3level(flat: int) -> str:
     """
     if flat < 0:
         raise ValueError(f"Flat address must be non-negative, got {flat}")
-    # While KNX theoretically supports 0-65535, ETS6 G-File ranges are
-    # bounded by the project's main/middle/sub limits.
     main: int = flat // _MAIN_FACTOR
     remainder: int = flat % _MAIN_FACTOR
     middle: int = remainder // _MIDDLE_FACTOR
@@ -179,8 +177,7 @@ def parse_gfile(xml_text: str) -> List[Dict[str, Any]]:
         * ``dpt`` (``str``) — datapoint type, e.g. ``"DPST-1-1"``.
         * ``id`` (``str``) — ETS6 internal GA identifier.
         * ``groups`` (``List[str]``) — ordered list of parent group-range
-          names, outermost first (e.g. ``["Beleuchtung schalten",
-          "Erdgeschoss"]``).
+          names, outermost first (e.g. ``["Lighting", "Ground floor"]``).
 
     Raises:
         ET.ParseError: If *xml_text* is not well-formed XML.
@@ -195,12 +192,12 @@ def parse_gfile(xml_text: str) -> List[Dict[str, Any]]:
           the project topology; it trusts the ETS6-provided values.
 
     Example:
-        >>> xml = '<GAs><GRs><GR Name="Licht"><GA Address="2304" Name="Decke" DatapointType="DPST-1-1"/></GR></GRs></GAs>'
+        >>> xml = '<GAs><GRs><GR Name="Lighting"><GA Address="2304" Name="Ceiling" DatapointType="DPST-1-1"/></GR></GRs></GAs>'
         >>> gas = parse_gfile(xml)
         >>> gas[0]['address']
         '1/1/0'
         >>> gas[0]['groups']
-        ['Licht']
+        ['Lighting']
     """
     # ── Normalise input ──────────────────────────────────────────────────
     if xml_text.startswith(_BOM):
@@ -316,10 +313,10 @@ def diff_gfile_vs_knxproj(
           ``only_in_*`` lists.
 
     Example:
-        >>> gfile = [{"address": "1/1/0", "name": "Küche Decke", "dpt": "DPST-1-1"}]
-        >>> knx   = [{"address": "1/1/0", "name": "Kanal 1",     "dpt": "1.001"}]
+        >>> gfile = [{"address": "1/1/0", "name": "Kitchen ceiling", "dpt": "DPST-1-1"}]
+        >>> knx   = [{"address": "1/1/0", "name": "Channel 1",     "dpt": "1.001"}]
         >>> diff_gfile_vs_knxproj(gfile, knx)
-        {'only_in_gfile': [], 'only_in_knxproj': [], 'renamed': {'1/1/0': {'gfile': 'Küche Decke', 'knxproj': 'Kanal 1'}}, 'dpt_changed': {}}
+        {'only_in_gfile': [], 'only_in_knxproj': [], 'renamed': {'1/1/0': {'gfile': 'Kitchen ceiling', 'knxproj': 'Channel 1'}}, 'dpt_changed': {}}
     """
     # ── Build address sets and lookup maps ───────────────────────────────
     gfile_addrs: Set[str] = {g["address"] for g in gfile_gas}

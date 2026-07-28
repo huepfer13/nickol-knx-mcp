@@ -80,7 +80,7 @@ def analyze_gfile(gfile_path: str) -> dict:
   "diff": {
     "only_in_gfile": ["0/0/4"],
     "only_in_knxproj": [],
-    "renamed": {"1/1/2": {"gfile": "KuecheLicht Schalten", "knxproj": "Kanal 2"}},
+    "renamed": {"1/1/0": {"gfile": "Kitchen ceiling", "knxproj": "Channel 1"}},
     "dpt_changed": {}
   }
 }
