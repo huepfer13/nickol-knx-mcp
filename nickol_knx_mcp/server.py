@@ -35,6 +35,33 @@ from .param_check import check_device_parameters as _check_device_parameters
 from .policy import (check_policy as _check_policy, load_policy as _load_policy,
                      example_policy_yaml as _example_policy_yaml)
 from .explain import explain_ga as _explain_ga
+from .gfile import parse_gfile, diff_gfile_vs_knxproj
+
+@mcp.tool()
+def analyze_gfile(gfile_path: str) -> dict[str, Any]:
+    """Parse an ETS6 G-File and return GA list + diff against loaded .knxproj.
+
+    The G-File is the ETS6 ProjectStore source of truth for group addresses.
+    If a .knxproj is loaded, also returns a diff.
+
+    Args:
+        gfile_path: Path to the G-File XML (e.g. from ProjectStore P-0110/G).
+    """
+    with open(gfile_path, 'r', encoding='utf-8-sig') as f:
+        xml_text = f.read()
+    gas = parse_gfile(xml_text)
+    result: dict[str, Any] = {
+        "ga_count": len(gas),
+        "group_addresses": gas,
+    }
+    proj = _STATE.get("project")
+    if proj is not None:
+        knx_gas = [{"address": g["address"], "name": g["name"], "dpt": g["dpt"]}
+                    for g in proj.list_gas()]
+        result["knxproj_ga_count"] = len(knx_gas)
+        result["diff"] = diff_gfile_vs_knxproj(gas, knx_gas)
+    return result
+
 from . import room_library as _room_library
 
 mcp = FastMCP("nickol-knx")
