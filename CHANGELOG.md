@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-07-28
+
+### Added
+- **G-File Parser** (`gfile.py`): Parse ETS6 ProjectStore G-File XML documents.
+  - `flat_to_3level()` — convert KNX flat addresses (e.g. 2304) to 3-level (1/1/0)
+  - `parse_gfile()` — extract all GAs with group-range hierarchy
+  - `diff_gfile_vs_knxproj()` — detect renames, new/deleted GAs, DPT changes
+- **New MCP tool**: `analyze_gfile` — read a G-File path and optionally diff
+  against the currently loaded `.knxproj`.
+- 7 unit tests (`tests/test_gfile.py`) with self-contained inline XML test data.
+- Feature documentation: `docs/features/gfile-parser.md`
+
+### Changed
+- `server.py`: imports and registers the `analyze_gfile` tool.
+- Code style: Google-style docstrings with type annotations, KNX addressing
+  reference, and inline rationale comments throughout `gfile.py`.
+
 ## [Unreleased]
 
 ### Added
