@@ -157,4 +157,5 @@ python3 -c "from nickol_knx_mcp.gfile import parse_gfile; ..."  # 32 GAs ✅
 - [ ] Support for 3-level GR nesting (currently 2-level, matching typical ETS6)
 - [ ] G-File write support (cautious: hash validation required)
 - [ ] Integration with `generate_ha_package` to use live G-File data
-- [ ] Watchdog mode: re-parse G-File on SMB change events
+- [ ] Watchdog mode: re-parse G-File on file-change events (inotify / polling)
+- [ ] CI pipeline example: GitHub Actions workflow for G-File linting
